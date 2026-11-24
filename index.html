@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Muzeycha 10 🐧</title>
+  <script src="https://telegram.org"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+    body { overflow: hidden; background: #120d09; font-family: sans-serif; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+    .top { position: fixed; top: 15px; left: 15px; right: 15px; display: flex; justify-content: space-between; z-index: 10; }
+    .btn { background: rgba(255,255,255,0.92); color: #111; border: none; padding: 10px 16px; border-radius: 22px; font-weight: bold; font-size: 14px; box-shadow: 0 4px 10px rgba(0,0,0,0.4); }
+    .red { background: #d64550; color: #fff; }
+    .cnt { position: fixed; bottom: 25px; left: 20px; background: rgba(255,255,255,0.92); color: #111; padding: 8px 14px; border-radius: 20px; font-weight: bold; z-index: 10; }
+    #joy { position: fixed; bottom: 25px; right: 25px; width: 110px; height: 110px; background: rgba(255,255,255,0.22); border: 2px solid rgba(255,255,255,0.7); border-radius: 50%; z-index: 20; touch-action: none; }
+    #knob { position: absolute; top: 32px; left: 32px; width: 42px; height: 42px; background: #fff; border-radius: 50%; box-shadow: 0 3px 8px rgba(0,0,0,0.5); }
+    #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 100; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+    #modal img { max-width: 92%; max-height: 75%; border: 4px solid #d4af37; border-radius: 10px; }
+    #modal button { margin-top: 20px; padding: 12px 32px; background: #d64550; color: #fff; border: none; border-radius: 22px; font-size: 16px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <button class="btn" onclick="tIdx=(tIdx+1)%themes.length">✏️ Muzeyni o'zgartirish</button>
+    <button class="btn red" onclick="navigator.share?navigator.share({url:location.href}):alert('Havola nusxalandi!')">📤 Ulashish</button>
+  </div>
+  <div class="cnt" id="cnt">👁 0 / 10</div>
+  <div id="joy"><div id="knob"></div></div>
+  <div id="modal"><img id="mimg"><button onclick="modal.style.display='none'">Yopish ✖</button></div>
+  <canvas id="c"></canvas>
+
+  <script>
+    if(window.Telegram && Telegram.WebApp) Telegram.WebApp.expand();
+    const c = document.getElementById('c'), ctx = c.getContext('2d');
+    let W, H;
+    function resize() { W = c.width = innerWidth; H = c.height = innerHeight; }
+    resize(); window.onresize = resize;
+
+    let photos = [];
+    try { const p = new URLSearchParams(location.search).get('imgs'); if(p) photos = JSON.parse(decodeURIComponent(p)); } catch(e){}
+    const imgs = photos.map(src => { const i = new Image(); i.src = src; return i; });
+
+    const themes = [
+      { wall: '#1f1610', floor: '#2e2118', line: '#d4af37', light: 'rgba(255,225,175,0.32)' },
+      { wall: '#f5f5f4', floor: '#e7e5e4', line: '#1c1917', light: 'rgba(255,255,255,0.5)' },
+      { wall: '#4c0519', floor: '#881337', line: '#fda4af', light: 'rgba(255,180,200,0.35)' }
+    ];
+    let tIdx = 0;
+
+    // 10 ta ramka uchun uzun zal (kamera pingvin bilan yuradi)
+    const hallWidth = 1750;
+    let camX = 0;
+    let px = 140, py = H * 0.72, step = 0, facing = 1;
+    let jx = 0, jy = 0, drag = false;
+    const seen = new Set();
+
+    joy.ontouchstart = e => { drag = true; moveJoy(e.touches); };
+    joy.ontouchmove = e => { if(drag) { e.preventDefault(); moveJoy(e.touches); } };
+    joy.ontouchend = () => { drag = false; jx = 0; jy = 0; knob.style.transform = 'translate(0,0)'; };
+    function moveJoy(t) {
+      const r = joy.getBoundingClientRect(), dx = t.clientX - (r.left + 55), dy = t.clientY - (r.top + 55);
+      const d = Math.min(35, Math.hypot(dx, dy)), a = Math.atan2(dy, dx);
+      jx = Math.cos(a) * d / 35; jy = Math.sin(a) * d / 35;
+      knob.style.transform = `translate(${Math.cos(a)*d}px, ${Math.sin(a)*d}px)`;
+    }
+
+    // Ramka ustiga bossa kattalashtirish
+    c.onclick = e => {
+      const fw = 105, fh = 140, fy = H * 0.22;
+      for(let i = 0; i < 10; i++) {
+        const fx = 90 + i * 160 - camX;
+        if(e.clientX > fx && e.clientX < fx + fw && e.clientY > fy && e.clientY < fy + fh && photos[i]) {
+          mimg.src = photos[i]; modal.style.display = 'flex';
+        }
+      }
+    };
+
+    function drawPenguin(x, y, wobble, dir) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(wobble);
+      ctx.scale(dir, 1);
+      // Soya
+      ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(0, 36, 26, 10, 0, 0, Math.PI*2); ctx.fill();
+      // Oyoqlar
+      ctx.fillStyle = '#f97316';
+      ctx.beginPath(); ctx.ellipse(-10, 32, 10, 5, 0, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(10, 32, 10, 5, 0, 0, Math.PI*2); ctx.fill();
+      // Tana
+      ctx.fillStyle = '#18181b'; ctx.beginPath(); ctx.ellipse(0, 0, 28, 36, 0, 0, Math.PI*2); ctx.fill();
+      // Qorin
+      ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(4, 4, 18, 26, 0, 0, Math.PI*2); ctx.fill();
+      // Qanot
+      ctx.fillStyle = '#27272a'; ctx.beginPath(); ctx.ellipse(-6, 4, 8, 20, 0.2, 0, Math.PI*2); ctx.fill();
+      // Bosh
+      ctx.fillStyle = '#18181b'; ctx.beginPath(); ctx.arc(0, -36, 21, 0, Math.PI*2); ctx.fill();
+      // Ko'z va Tumshuq
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(8, -39, 4.5, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(9, -39, 2.2, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#f97316'; ctx.beginPath(); ctx.moveTo(18, -36); ctx.lineTo(30, -32); ctx.lineTo(18, -28); ctx.fill();
+      ctx.restore();
+    }
+
+    function loop() {
+      requestAnimationFrame(loop);
+      const th = themes[tIdx];
+      ctx.fillStyle = th.wall; ctx.fillRect(0, 0, W, H * 0.56);
+      ctx.fillStyle = th.floor; ctx.fillRect(0, H * 0.56, W, H * 0.44);
+      ctx.strokeStyle = th.line; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(0, H * 0.56); ctx.lineTo(W, H * 0.56); ctx.stroke();
+
+      // Harakat va kamera
+      if(Math.abs(jx) > 0.05 || Math.abs(jy) > 0.05) {
+        px = Math.max(50, Math.min(hallWidth - 50, px + jx * 4.5));
+        py = Math.max(H * 0.58, Math.min(H - 65, py + jy * 4));
+        if(jx > 0.1) facing = 1;
+        if(jx < -0.1) facing = -1;
+        step += 0.25;
+      } else { step = 0; }
+
+      const targetCam = Math.max(0, Math.min(hallWidth - W, px - W / 2));
+      camX += (targetCam - camX) * 0.1;
+
+      // 10 ta Ramka chizish
+      const fw = 105, fh = 140, fy = H * 0.22;
+      for(let i = 0; i < 10; i++) {
+        const fx = 90 + i * 160 - camX;
+        if(fx < -150 || fx > W + 150) continue;
+
+        const g = ctx.createRadialGradient(fx + fw/2, fy + fh/2, 10, fx + fw/2, fy + fh/2, 130);
+        g.addColorStop(0, th.light); g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g; ctx.fillRect(fx - 35, fy - 45, fw + 70, fh + 130);
+
+        ctx.fillStyle = '#0a0a0a'; ctx.fillRect(fx - 6, fy - 6, fw + 12, fh + 12);
+        ctx.strokeStyle = '#d4af37'; ctx.lineWidth = 2; ctx.strokeRect(fx - 6, fy - 6, fw + 12, fh + 12);
+        ctx.fillStyle = '#262626'; ctx.fillRect(fx, fy, fw, fh);
+
+        if(imgs[i] && imgs[i].complete && imgs[i].naturalWidth > 0) {
+          ctx.drawImage(imgs[i], fx, fy, fw, fh);
+        } else {
+          ctx.fillStyle = '#999'; ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center';
+          ctx.fillText((i + 1) + '-rasm', fx + fw/2, fy + fh/2);
+        }
+
+        if(Math.hypot((px - camX) - (fx + fw/2), py - (fy + fh + 45)) < 85) {
+          seen.add(i);
+          const total = photos.length > 0 ? Math.min(10, photos.length) : 10;
+          cnt.innerText = `👁 ${seen.size} / ${total}`;
+        }
+      }
+
+      drawPenguin(px - camX, py, Math.sin(step) * 0.14, facing);
+    }
+    loop();
+  </script>
+</body>
+</html>
